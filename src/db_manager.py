@@ -3,7 +3,6 @@ import sqlite3
 def create_db():
     conn = sqlite3.connect('db/usuarios.db')
     cursor = conn.cursor()
-    # Crear la tabla con todas las columnas si no existe
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS usuarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -12,18 +11,25 @@ def create_db():
             fecha_registro TEXT,
             fecha_vencimiento TEXT,
             role TEXT DEFAULT 'cliente',
-            ci TEXT
+            ci TEXT,
+            contrasenia TEXT,
+            ingresos INTEGER DEFAULT 0
         )
     ''')
+    # Si la columna ya existe, no pasa nada; si no, la añade.
+    try:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN ingresos INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # Ya existe
     conn.commit()
     conn.close()
 
-def insert_user(nombre, imagen_rostro, fecha_registro, fecha_vencimiento, role='cliente', ci=None):
+def insert_user(nombre, imagen_rostro, fecha_registro, fecha_vencimiento, role='cliente', ci=None, contrasenia=None):
     conn = sqlite3.connect('db/usuarios.db')
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO usuarios (nombre, imagen_rostro, fecha_registro, fecha_vencimiento, role, ci) VALUES (?, ?, ?, ?, ?, ?)",
-        (nombre, imagen_rostro, fecha_registro, fecha_vencimiento, role, ci)
+        "INSERT INTO usuarios (nombre, imagen_rostro, fecha_registro, fecha_vencimiento, role, ci, contrasenia) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (nombre, imagen_rostro, fecha_registro, fecha_vencimiento, role, ci, contrasenia)
     )
     conn.commit()
     conn.close()
@@ -35,6 +41,13 @@ def get_users():
     users = cursor.fetchall()
     conn.close()
     return users
+
+def increment_ingresos(user_id):
+    conn =sqlite3.connect('db/usuarios.db')
+    cursor = conn.cursor()
+    cursor.execute("UPDATE usuarios SET ingresos = ingresos + 1 WHERE id=?", (user_id,))
+    conn.commit()
+    conn.close()
 
 def update_user(user_id, new_nombre, new_fecha_vencimiento, new_role=None, new_ci=None):
     conn = sqlite3.connect('db/usuarios.db')
@@ -64,6 +77,13 @@ def clear_faces_db():
     conn = sqlite3.connect('db/usuarios.db')
     cursor = conn.cursor()
     cursor.execute("DELETE FROM usuarios")
+    conn.commit()
+    conn.close()
+
+def delete_user(user_id):
+    conn = sqlite3.connect('db/usuarios.db')
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM usuarios WHERE id=?", (user_id,))
     conn.commit()
     conn.close()
 

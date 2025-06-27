@@ -49,7 +49,7 @@ def increment_ingresos(user_id):
     conn.commit()
     conn.close()
 
-def update_user(user_id, new_nombre, new_fecha_vencimiento, new_role=None, new_ci=None):
+def update_user(user_id, new_nombre, new_inicio, new_fecha_vencimiento, new_role=None, new_ci=None):
     conn = sqlite3.connect('db/usuarios.db')
     cursor = conn.cursor()
     # Construir la consulta dinámicamente según los campos proporcionados
@@ -58,6 +58,9 @@ def update_user(user_id, new_nombre, new_fecha_vencimiento, new_role=None, new_c
     if new_nombre is not None:
         fields.append("nombre=?")
         values.append(new_nombre)
+    if new_inicio is not None:
+        fields.append("fecha_registro=?")
+        values.append(new_inicio)
     if new_fecha_vencimiento is not None:
         fields.append("fecha_vencimiento=?")
         values.append(new_fecha_vencimiento)

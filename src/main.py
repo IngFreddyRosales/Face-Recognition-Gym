@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
 from PIL import Image, ImageTk
-from db_manager import insert_user, get_users, update_user, clear_faces_db, delete_user
+from db_manager import insert_user, get_users, update_user, clear_faces_db, delete_user, increment_ingresos
 from datetime import datetime, timedelta
 import cv2
 import numpy as np
@@ -112,7 +112,7 @@ def run_admin_gui():
     y = (root.winfo_screenheight() // 2) - (700 // 2)
     root.geometry(f"800x700+{x}+{y}")
 
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(0)  # Cambia la URL según tu cámara IP)
     captured_face = {'img': None}
 
     main_frame = tk.Frame(root, bg="#34495E")
@@ -287,48 +287,79 @@ def run_admin_gui():
             messagebox.showerror("❌ Error", "No se pudo procesar el rostro. Intente nuevamente.")
 
     def show_users():
-        users = get_users()
-        if not users:
-            messagebox.showinfo("ℹ️ Información", "No hay usuarios registrados.")
-            return
+        def filter_users():
+            """Filtra los usuarios por nombre o CI."""
+            search_term = search_entry.get().strip().lower()
+            filtered_users = []
+            for user in get_users():
+                nombre = user[1].lower()
+                ci = user[6].lower() if user[6] else ""
+                if search_term in nombre or search_term in ci:
+                    filtered_users.append(user)
+            display_users(filtered_users)
+    
+        def display_users(users):
+            """Muestra los usuarios en la tabla."""
+            for widget in scrollable_frame.winfo_children():
+                widget.destroy()  # Limpia la tabla antes de mostrar los resultados
+    
+            headers = ["ID", "Nombre", "Fecha Registro", "Fecha Vencimiento", "Rol", "CI", "Estado", "Ingresos", "Acciones"]
+            for i, header in enumerate(headers):
+                tk.Label(scrollable_frame, text=header, font=("Arial", 12, "bold"), 
+                         bg="#2C3E50", fg="#ECF0F1", relief="ridge", bd=1).grid(row=0, column=i, sticky="ew", padx=1, pady=1)
+    
+            for i, user in enumerate(users, 1):
+                fecha_vencimiento = user[4]
+                hoy = datetime.now().strftime('%Y-%m-%d')
+                estado = "✅ Activa" if hoy <= fecha_vencimiento else "❌ Vencida"
+                estado_color = "#27AE60" if hoy <= fecha_vencimiento else "#E74C3C"
+                tk.Label(scrollable_frame, text=str(user[0]), bg="#ECF0F1", relief="ridge", bd=1).grid(row=i, column=0, sticky="ew", padx=1, pady=1)  # ID
+                tk.Label(scrollable_frame, text=user[1], bg="#ECF0F1", relief="ridge", bd=1).grid(row=i, column=1, sticky="ew", padx=1, pady=1)      # Nombre
+                tk.Label(scrollable_frame, text=user[3], bg="#ECF0F1", relief="ridge", bd=1).grid(row=i, column=2, sticky="ew", padx=1, pady=1)      # Fecha Registro
+                tk.Label(scrollable_frame, text=user[4], bg="#ECF0F1", relief="ridge", bd=1).grid(row=i, column=3, sticky="ew", padx=1, pady=1)      # Fecha Vencimiento
+                tk.Label(scrollable_frame, text=user[5], bg="#ECF0F1", relief="ridge", bd=1).grid(row=i, column=4, sticky="ew", padx=1, pady=1)      # Rol
+                tk.Label(scrollable_frame, text=user[6], bg="#ECF0F1", relief="ridge", bd=1).grid(row=i, column=5, sticky="ew", padx=1, pady=1)      # CI
+                tk.Label(scrollable_frame, text=estado, bg="#ECF0F1", fg=estado_color, relief="ridge", bd=1).grid(row=i, column=6, sticky="ew", padx=1, pady=1)  # Estado
+                tk.Label(scrollable_frame, text=str(user[8]), bg="#ECF0F1", relief="ridge", bd=1).grid(row=i, column=7, sticky="ew", padx=1, pady=1)  # Ingresos
+                tk.Button(scrollable_frame, text="✏️ Editar", bg="#3498DB", fg="white", 
+                          command=lambda user_id=user[0], nombre=user[1], inicio=user[3], vencimiento=user[4], role=user[5], CI=user[6]: edit_user(user_id, nombre,inicio, vencimiento, role, CI)).grid(row=i, column=8, padx=5, pady=2)  # Acciones
+                tk.Button(scrollable_frame, text="🗑️ Eliminar", bg="#E74C3C", fg="white",
+                          command=lambda user_id=user[0]: delete_user_opcion(user_id, top)).grid(row=i, column=9, padx=5, pady=2)  # Eliminar
+    
         top = tk.Toplevel(root)
         top.title("👥 Usuarios Registrados")
-        top.geometry("900x500")
+        top.geometry("1000x500")
         top.configure(bg="#34495E")
+    
+        # Campo de búsqueda
+        search_frame = tk.Frame(top, bg="#34495E")
+        search_frame.pack(fill="x", padx=10, pady=10)
+    
+        tk.Label(search_frame, text="🔍 Buscar por Nombre o CI:", font=("Arial", 12), bg="#34495E", fg="#ECF0F1").pack(side="left", padx=5)
+        search_entry = tk.Entry(search_frame, font=("Arial", 12), width=30)
+        search_entry.pack(side="left", padx=5)
+        tk.Button(search_frame, text="Buscar", command=filter_users, bg="#3498DB", fg="white", font=("Arial", 12), cursor="hand2").pack(side="left", padx=5)
+    
+        # Tabla de usuarios
         canvas = tk.Canvas(top, bg="#34495E")
-        scrollbar = ttk.Scrollbar(top, orient="vertical", command=canvas.yview)
+        scrollbar = tk.Scrollbar(top, orient="vertical", command=canvas.yview)
         scrollable_frame = tk.Frame(canvas, bg="#34495E")
+    
         scrollable_frame.bind(
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
+    
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
-        headers = ["ID", "Nombre", "Fecha Registro", "Fecha Vencimiento", "Rol", "CI", "Estado","Ingresos"]
-        for i, header in enumerate(headers):
-            tk.Label(scrollable_frame, text=header, font=("Arial", 12, "bold"), 
-                    bg="#2C3E50", fg="#ECF0F1", relief="ridge", bd=1).grid(row=0, column=i, sticky="ew", padx=1, pady=1)
-        for i, user in enumerate(users, 1):
-            fecha_vencimiento = user[4]
-            hoy = datetime.now().strftime('%Y-%m-%d')
-            estado = "✅ Activa" if hoy <= fecha_vencimiento else "❌ Vencida"
-            estado_color = "#27AE60" if hoy <= fecha_vencimiento else "#E74C3C"
-            tk.Label(scrollable_frame, text=str(user[0]), bg="#ECF0F1", relief="ridge", bd=1).grid(row=i, column=0, sticky="ew", padx=1, pady=1)  # ID
-            tk.Label(scrollable_frame, text=user[1], bg="#ECF0F1", relief="ridge", bd=1).grid(row=i, column=1, sticky="ew", padx=1, pady=1)      # Nombre
-            tk.Label(scrollable_frame, text=user[3], bg="#ECF0F1", relief="ridge", bd=1).grid(row=i, column=2, sticky="ew", padx=1, pady=1)      # Fecha Registro
-            tk.Label(scrollable_frame, text=user[4], bg="#ECF0F1", relief="ridge", bd=1).grid(row=i, column=3, sticky="ew", padx=1, pady=1)      # Fecha Vencimiento
-            tk.Label(scrollable_frame, text=user[5], bg="#ECF0F1", relief="ridge", bd=1).grid(row=i, column=4, sticky="ew", padx=1, pady=1)      # Rol
-            tk.Label(scrollable_frame, text=user[6], bg="#ECF0F1", relief="ridge", bd=1).grid(row=i, column=5, sticky="ew", padx=1, pady=1)      # CI
-            tk.Label(scrollable_frame, text=estado, bg="#ECF0F1", fg=estado_color, relief="ridge", bd=1).grid(row=i, column=6, sticky="ew", padx=1, pady=1)  # Estado
-            tk.Label(scrollable_frame, text=str(user[8]), bg="#ECF0F1", relief="ridge", bd=1).grid(row=i, column=7, sticky="ew", padx=1, pady=1)  # Ingresos
-            tk.Button(scrollable_frame, text="✏️ Editar", bg="#3498DB", fg="white", 
-                     command=lambda user_id=user[0], nombre=user[1], vencimiento=user[4], role=user[5], CI=user[6]: edit_user(user_id, nombre, vencimiento, role, CI)).grid(row=i, column=8, padx=5, pady=2)  # Acciones
-            tk.Button(scrollable_frame, text="🗑️ Eliminar", bg="#E74C3C", fg="white",
-                      command=lambda user_id=user[0]: delete_user_opcion(user_id, top)).grid(row=i, column=9, padx=5, pady=2)  # Eliminar
+    
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
+    
+        # Mostrar todos los usuarios al inicio
+        display_users(get_users())
 
-    def edit_user(user_id, current_nombre, current_vencimiento, current_role, current_ci):
+    def edit_user(user_id, current_nombre, current_inicio, current_vencimiento, current_role, current_ci):
         edit_win = tk.Toplevel(root)
         edit_win.title("✏️ Editar Usuario")
         edit_win.geometry("420x400")
@@ -351,13 +382,19 @@ def run_admin_gui():
 
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-
+        
         # --- Contenido del formulario dentro de scrollable_frame ---
         tk.Label(scrollable_frame, text="✏️ Editar Usuario", font=("Arial", 18, "bold"), bg="#34495E", fg="#ECF0F1").pack(pady=20)
         tk.Label(scrollable_frame, text="👤 Nombre:", bg="#34495E", fg="#ECF0F1").pack()
         entry_nombre_edit = tk.Entry(scrollable_frame, font=("Arial", 12), width=30)
         entry_nombre_edit.insert(0, current_nombre)
         entry_nombre_edit.pack(pady=5)
+
+        tk.Label(scrollable_frame, text="📅 Fecha de Registro:", bg="#34495E", fg="#ECF0F1").pack()
+        entry_inicio_edit = tk.Entry(scrollable_frame, font=("Arial", 12), width=30)
+        entry_inicio_edit.insert(0, current_inicio)
+        entry_inicio_edit.pack(pady=5)
+
         tk.Label(scrollable_frame, text="📅 Fecha de Vencimiento:", bg="#34495E", fg="#ECF0F1").pack()
         entry_vencimiento_edit = tk.Entry(scrollable_frame, font=("Arial", 12), width=30)
         entry_vencimiento_edit.insert(0, current_vencimiento)
@@ -373,9 +410,12 @@ def run_admin_gui():
         entry_ci_edit = tk.Entry(scrollable_frame, font=("Arial", 12), width=30)
         entry_ci_edit.insert(0, current_ci if current_ci else "")
         entry_ci_edit.pack(pady=5)
+
+
     
         def save_changes():
             new_nombre = entry_nombre_edit.get().strip()
+            new_inicio = entry_inicio_edit.get().strip()
             new_vencimiento = entry_vencimiento_edit.get().strip()
             new_role = role_var_edit.get()
             new_ci = entry_ci_edit.get().strip()
@@ -387,7 +427,7 @@ def run_admin_gui():
             except ValueError:
                 messagebox.showerror("❌ Error", "Formato de fecha inválido. Use YYYY-MM-DD")
                 return
-            update_user(user_id, new_nombre, new_vencimiento, new_role, new_ci)
+            update_user(user_id, new_nombre, new_inicio, new_vencimiento, new_role, new_ci)
             messagebox.showinfo("✅ Éxito", "Usuario actualizado correctamente.")
             edit_win.destroy()
         tk.Button(scrollable_frame, text="💾 Guardar Cambios", command=save_changes, 
@@ -440,6 +480,7 @@ def run_admin_gui():
     )
     back_button.pack(side="bottom", pady=20)
 
+
     def on_closing():
         cap.release()
         root.destroy()
@@ -452,6 +493,8 @@ def run_admin_gui():
     
 
 def run_user_gui():
+    global current_user_id  # Declarar la variable global
+    current_user_id = None  # Inicializar la variable
     root = tk.Tk()
     root.title("🔍 Verificación de Membresía")
     root.geometry("900x800")
@@ -552,7 +595,10 @@ def run_user_gui():
         except Exception:
             pass
         return None
+    
+    join_button = None  # Inicializar la variable join_button    
     def check_membership_in_frame(face_img):
+        global current_user_id, join_button
         face_encoding = get_face_encoding(face_img)
         if face_encoding is None:
             return False
@@ -564,6 +610,7 @@ def run_user_gui():
                 continue
             match = face_recognition.compare_faces([db_encoding], face_encoding, tolerance=0.5)[0]
             if match:
+                current_user_id = user[0]
                 nombre = user[1]
                 fecha_vencimiento = user[4]
                 hoy = datetime.now().strftime('%Y-%m-%d')
@@ -572,6 +619,26 @@ def run_user_gui():
                     name_label.config(text=f"Bienvenido, {nombre}")
                     expiry_label.config(text=f"Válido hasta: {fecha_vencimiento}")
                     play_sound("active")
+
+                    # Elimina el botón anterior si existe
+                    if join_button:
+                        join_button.destroy()
+
+                    # Crea el botón "Ingresar"
+                    join_button = tk.Button(
+                        main_frame,
+                        text="Ingresar",
+                        font=("Arial", 16, "bold"),
+                        bg="#27AE60",
+                        fg="white",
+                        activebackground="#229954",
+                        command=lambda: (
+                            increment_ingresos(current_user_id) if current_user_id else messagebox.showerror("❌ Error", "No se ha identificado ningún usuario."),
+                            messagebox.showinfo("✅ Éxito", "Ingreso registrado exitosamente.") if current_user_id else None
+                        ),
+                        cursor="hand2"
+                    )
+                    join_button.pack(pady=10)
                 else:
                     status_label.config(text="❌ Membresía Vencida", fg="#E74C3C")
                     name_label.config(text=f"Usuario: {nombre}")
@@ -607,6 +674,7 @@ def run_user_gui():
                     check_membership_in_frame(face_img)
                     last_check_time = now
         root.after(30, update_camera)
+
     back_button = tk.Button(
         main_frame,
         text="🔙 Volver al Menú Principal",
@@ -623,6 +691,7 @@ def run_user_gui():
         run_main_menu()
     root.protocol("WM_DELETE_WINDOW", on_closing)
     update_camera()
+    root.mainloop()
     root.mainloop()
 
 if __name__ == "__main__":
